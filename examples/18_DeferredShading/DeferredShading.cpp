@@ -281,18 +281,34 @@ protected:
 		inputReferences[2].layout     = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		inputReferences[3].attachment = 4;
 		inputReferences[3].layout     = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+		//如果创建第三个pipeline，附着也在这里创建吗？
+		VkAttachmentReference debuginputReferences;
+		debuginputReferences.attachment = 2;     //法线
+		debuginputReferences.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         
-		std::vector<VkSubpassDescription> subpassDescriptions(2);
+
+		//指定color和深度
+		std::vector<VkSubpassDescription> subpassDescriptions(3);
 		subpassDescriptions[0].pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
 		subpassDescriptions[0].colorAttachmentCount    = 3;
-		subpassDescriptions[0].pColorAttachments       = colorReferences;
-		subpassDescriptions[0].pDepthStencilAttachment = &depthReference;
+		subpassDescriptions[0].pColorAttachments       = colorReferences;     //可以看到第一个pass中输出到这个colorReferences附着中   所以第一个管线应该要绑定3个RT和一个深度缓冲
+		subpassDescriptions[0].pDepthStencilAttachment = &depthReference;     //深度输出到depth附着中   
         
+		//指定color和输入
 		subpassDescriptions[1].pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
 		subpassDescriptions[1].colorAttachmentCount    = 1;
 		subpassDescriptions[1].pColorAttachments       = &swapReference;
 		subpassDescriptions[1].inputAttachmentCount    = 4;
-		subpassDescriptions[1].pInputAttachments       = inputReferences;
+		subpassDescriptions[1].pInputAttachments       = inputReferences;    //他需要4个输入，这4个输入引用的是inputReferences  （刚好这4个输入分别是第一个pass输出的color附着和depth附着）
+
+
+		//指定color和输入
+		subpassDescriptions[2].pipelineBindPoint	    = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpassDescriptions[2].colorAttachmentCount     = 1;
+		subpassDescriptions[2].pColorAttachments        = &swapReference;
+		subpassDescriptions[2].inputAttachmentCount     = 1;
+		subpassDescriptions[2].pInputAttachments        = &debuginputReferences;
 		
         std::vector<VkSubpassDependency> dependencies(3);
         dependencies[0].srcSubpass      = VK_SUBPASS_EXTERNAL;
@@ -473,6 +489,12 @@ private:
 			"assets/shaders/18_DeferredShading/quad.frag.spv"
 		);
 
+		m_Shader2 = vk_demo::DVKShader::Create(
+			m_VulkanDevice,
+			"assets/shaders/18_DeferredShading/debugquad.vert.spv",
+			"assets/shaders/18_DeferredShading/debugquad.frag.spv"
+		);
+
 		vk_demo::DVKCommandBuffer* cmdBuffer = vk_demo::DVKCommandBuffer::Create(m_VulkanDevice, m_CommandPool);
 
 		// scene model
@@ -502,6 +524,25 @@ private:
             m_Shader1->perVertexAttributes
         );
 
+		// debug quad model
+		std::vector<float> debugvertices = {
+			-1.0f,  -0.2f, 0.0f, 0.0f, 0.0f,
+			-0.2f,  -0.2f, 0.0f, 1.0f, 0.0f,
+			-0.2f, -1.0f, 0.0f, 1.0f, 1.0f,
+			-1.0f, -1.0f, 0.0f, 0.0f, 1.0f
+		};
+		std::vector<uint16> debugindices = {
+			0, 1, 2, 0, 2, 3
+		};
+
+		m_debugQuad = vk_demo::DVKModel::Create(
+			m_VulkanDevice,
+			cmdBuffer,
+			debugvertices,
+			debugindices,
+			m_Shader2->perVertexAttributes
+		);
+
 		delete cmdBuffer;
 	}
     
@@ -509,9 +550,11 @@ private:
 	{
 		delete m_Model;
         delete m_Quad;
+		delete m_debugQuad;
 
 		delete m_Shader0;
 		delete m_Shader1;
+		delete m_Shader2;
 	}
     
 	void SetupCommandBuffers()
@@ -564,24 +607,38 @@ private:
 			vkCmdSetScissor(m_CommandBuffers[i],  0, 1, &scissor);
 
 			// pass0
+			//这个pass用来画gbuffer
 			{
 				vkCmdBindPipeline(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline0->pipeline);
 				for (int32 meshIndex = 0; meshIndex < m_Model->meshes.size(); ++meshIndex) {
 					uint32 offset = meshIndex * modelAlign;
 					vkCmdBindDescriptorSets(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline0->pipelineLayout, 0, m_DescriptorSet0->descriptorSets.size(), m_DescriptorSet0->descriptorSets.data(), 1, &offset);
-					m_Model->meshes[meshIndex]->BindDrawCmd(m_CommandBuffers[i]);
+					m_Model->meshes[meshIndex]->BindDrawCmd(m_CommandBuffers[i]);   //绑定顶点到管线
 				}
 			}
 
 			vkCmdNextSubpass(m_CommandBuffers[i], VK_SUBPASS_CONTENTS_INLINE);
 
 			// pass1
+			//这个pass把gbuffer当做输入，画在一张全屏上
 			{
 				vkCmdBindPipeline(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline1->pipeline);
 				vkCmdBindDescriptorSets(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline1->pipelineLayout, 0, m_DescriptorSets[i]->descriptorSets.size(), m_DescriptorSets[i]->descriptorSets.data(), 0, nullptr);
                 for (int32 meshIndex = 0; meshIndex < m_Quad->meshes.size(); ++meshIndex) {
                     m_Quad->meshes[meshIndex]->BindDrawCmd(m_CommandBuffers[i]);
                 }
+			}
+
+			vkCmdNextSubpass(m_CommandBuffers[i], VK_SUBPASS_CONTENTS_INLINE);
+
+			// pass2
+			//这个pass把gbuffer当做输入，画在一张全屏上
+			{
+				vkCmdBindPipeline(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline2->pipeline);
+				vkCmdBindDescriptorSets(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline2->pipelineLayout, 0, m_DebugDescriptorSets[i]->descriptorSets.size(), m_DebugDescriptorSets[i]->descriptorSets.data(), 0, nullptr);
+				for (int32 meshIndex = 0; meshIndex < m_debugQuad->meshes.size(); ++meshIndex) {
+					m_debugQuad->meshes[meshIndex]->BindDrawCmd(m_CommandBuffers[i]);
+				}
 			}
             
 			m_GUI->BindDrawCmd(m_CommandBuffers[i], m_RenderPass, 1);
@@ -607,10 +664,21 @@ private:
 			m_DescriptorSets[i]->WriteImage("inputPosition", m_AttachsPosition[i]);
 			m_DescriptorSets[i]->WriteBuffer("lightDatas", m_LightBuffer);
 		}
+
+
+		m_DebugDescriptorSets.resize(m_AttachsNormal.size());
+		for (int32 i = 0; i < m_DebugDescriptorSets.size(); ++i)
+		{
+			m_DebugDescriptorSets[i] = m_Shader2->AllocateDescriptorSet();
+			m_DebugDescriptorSets[i]->WriteImage("inputNormal", m_AttachsNormal[i]);
+		}
+
+
 	}
     
 	void CreatePipelines()
 	{
+		//创建第一个pipeline，只是用于画gbuffer
 		vk_demo::DVKGfxPipelineInfo pipelineInfo0;
 		pipelineInfo0.shader = m_Shader0;
         pipelineInfo0.colorAttachmentCount = 3;
@@ -626,6 +694,7 @@ private:
 			m_RenderPass
 		);
 		
+		//第二个pipeline，用于画全屏
 		vk_demo::DVKGfxPipelineInfo pipelineInfo1;
 		pipelineInfo1.depthStencilState.depthTestEnable   = VK_FALSE;
 		pipelineInfo1.depthStencilState.depthWriteEnable  = VK_FALSE;
@@ -643,6 +712,27 @@ private:
 			m_Shader1->pipelineLayout, 
 			m_RenderPass
 		);
+
+		//画gbuffer
+		vk_demo::DVKGfxPipelineInfo pipelineInfo2;
+		pipelineInfo2.depthStencilState.depthTestEnable = VK_FALSE;
+		pipelineInfo2.depthStencilState.depthWriteEnable = VK_FALSE;
+		pipelineInfo2.depthStencilState.stencilTestEnable = VK_FALSE;
+		pipelineInfo2.shader = m_Shader2;
+		pipelineInfo2.subpass = 2;
+		m_Pipeline2 = vk_demo::DVKGfxPipeline::Create(
+			m_VulkanDevice,
+			m_PipelineCache,
+			pipelineInfo2,
+			{
+				m_debugQuad->GetInputBinding()
+			},
+			m_debugQuad->GetInputAttributes(),
+			m_Shader2->pipelineLayout,
+			m_RenderPass
+		);
+
+
 	}
     
 	void DestroyPipelines()
@@ -773,6 +863,7 @@ private:
     
 	vk_demo::DVKModel*				m_Model = nullptr;
     vk_demo::DVKModel*              m_Quad = nullptr;
+	vk_demo::DVKModel*				m_debugQuad = nullptr;
 
     vk_demo::DVKGfxPipeline*        m_Pipeline0 = nullptr;
 	vk_demo::DVKShader*				m_Shader0 = nullptr;
@@ -780,7 +871,13 @@ private:
 	
 	vk_demo::DVKGfxPipeline*        m_Pipeline1 = nullptr;
 	vk_demo::DVKShader*				m_Shader1 = nullptr;
+
+	vk_demo::DVKGfxPipeline*		m_Pipeline2 = nullptr;
+	vk_demo::DVKShader*				m_Shader2 = nullptr;
+
 	DVKDescriptorSetArray			m_DescriptorSets;
+
+	DVKDescriptorSetArray           m_DebugDescriptorSets;
 
 	DVKTextureArray					m_AttachsDepth;
 	DVKTextureArray					m_AttachsColor;
