@@ -33,8 +33,12 @@ public:
 		return true;
 	}
 
+	void Test()
+	{}
+
 	virtual bool Init() override
 	{
+		Test();
         CreateDepthStencil();
         CreateRenderPass();
         CreateFrameBuffers();
