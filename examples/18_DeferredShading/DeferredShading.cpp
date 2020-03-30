@@ -100,6 +100,28 @@ protected:
 			attachments[4] = m_AttachsDepth[i]->imageView;
 			VERIFYVULKANRESULT(vkCreateFramebuffer(device, &frameBufferCreateInfo, VULKAN_CPU_ALLOCATOR, &m_FrameBuffers[i]));
 		}
+
+
+		//创建Debug的RENDERPASS
+		VkImageView attachmentsDebug[2];
+
+		VkFramebufferCreateInfo frameBufferCreateInfoDebug;
+		ZeroVulkanStruct(frameBufferCreateInfoDebug, VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO);
+		frameBufferCreateInfoDebug.renderPass = m_RenderPassDebug;
+		frameBufferCreateInfoDebug.attachmentCount = 2;
+		frameBufferCreateInfoDebug.pAttachments = attachmentsDebug;
+		frameBufferCreateInfoDebug.width = fwidth;
+		frameBufferCreateInfoDebug.height = fheight;
+		frameBufferCreateInfoDebug.layers = 1;
+
+//		const std::vector<VkImageView>& backbufferViews = GetVulkanRHI()->GetBackbufferViews();
+
+		m_FrameBuffersDebug.resize(backbufferViews.size());
+		for (uint32 i = 0; i < m_FrameBuffersDebug.size(); ++i) {
+			attachmentsDebug[0] = backbufferViews[i];
+			attachmentsDebug[1] = m_AttachsDepth[i]->imageView;
+			VERIFYVULKANRESULT(vkCreateFramebuffer(device, &frameBufferCreateInfoDebug, VULKAN_CPU_ALLOCATOR, &m_FrameBuffersDebug[i]));
+		}
 	}
 
 	void CreateDepthStencil() override
@@ -154,6 +176,7 @@ protected:
         m_AttachsNormal.resize(numBuffer);
 		m_AttachsPosition.resize(numBuffer);
 		m_AttachsDepth.resize(numBuffer);
+		m_AttachsDebug.resize(numBuffer);
 
 		for (int32 i = 0; i < m_AttachsColor.size(); ++i)
 		{
@@ -173,7 +196,7 @@ protected:
 				VK_FORMAT_R16G16B16A16_SFLOAT,
                 VK_IMAGE_ASPECT_COLOR_BIT,
                 fwidth, fheight,
-                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT
+                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
             );
         }
 
@@ -196,6 +219,18 @@ protected:
 				VK_IMAGE_ASPECT_DEPTH_BIT,
 				fwidth, fheight,
 				VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT
+			);
+		}
+
+
+		for (int32 i = 0; i < m_AttachsDebug.size(); ++i)
+		{
+			m_AttachsDebug[i] = vk_demo::DVKTexture::CreateAttachment(
+				m_VulkanDevice,
+				VK_FORMAT_R16G16B16A16_SFLOAT,
+				VK_IMAGE_ASPECT_COLOR_BIT,
+				fwidth, fheight,
+				VK_IMAGE_USAGE_SAMPLED_BIT
 			);
 		}
 	}
@@ -289,7 +324,7 @@ protected:
         
 
 		//指定color和深度
-		std::vector<VkSubpassDescription> subpassDescriptions(3);
+		std::vector<VkSubpassDescription> subpassDescriptions(2);
 		subpassDescriptions[0].pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
 		subpassDescriptions[0].colorAttachmentCount    = 3;
 		subpassDescriptions[0].pColorAttachments       = colorReferences;     //可以看到第一个pass中输出到这个colorReferences附着中   所以第一个管线应该要绑定3个RT和一个深度缓冲
@@ -303,12 +338,12 @@ protected:
 		subpassDescriptions[1].pInputAttachments       = inputReferences;    //他需要4个输入，这4个输入引用的是inputReferences  （刚好这4个输入分别是第一个pass输出的color附着和depth附着）
 
 
-		//指定color和输入
-		subpassDescriptions[2].pipelineBindPoint	    = VK_PIPELINE_BIND_POINT_GRAPHICS;
-		subpassDescriptions[2].colorAttachmentCount     = 1;
-		subpassDescriptions[2].pColorAttachments        = &swapReference;
-		subpassDescriptions[2].inputAttachmentCount     = 1;
-		subpassDescriptions[2].pInputAttachments        = &debuginputReferences;
+// 		//指定color和输入
+// 		subpassDescriptions[2].pipelineBindPoint	    = VK_PIPELINE_BIND_POINT_GRAPHICS;
+// 		subpassDescriptions[2].colorAttachmentCount     = 1;
+// 		subpassDescriptions[2].pColorAttachments        = &swapReference;
+// 		subpassDescriptions[2].inputAttachmentCount     = 1;
+// 		subpassDescriptions[2].pInputAttachments        = &debuginputReferences;
 		
         std::vector<VkSubpassDependency> dependencies(3);
         dependencies[0].srcSubpass      = VK_SUBPASS_EXTERNAL;
@@ -344,6 +379,77 @@ protected:
 		renderPassInfo.dependencyCount = dependencies.size();
 		renderPassInfo.pDependencies   = dependencies.data();
 		VERIFYVULKANRESULT(vkCreateRenderPass(device, &renderPassInfo, VULKAN_CPU_ALLOCATOR, &m_RenderPass));
+
+
+
+		//创建debugRenderPass
+		std::vector<VkAttachmentDescription> attachmentsDebug(2);
+		// swap chain attachment
+		attachmentsDebug[0].format = PixelFormatToVkFormat(pixelFormat, false);
+		attachmentsDebug[0].samples = m_SampleCount;
+		attachmentsDebug[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		attachmentsDebug[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		attachmentsDebug[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		attachmentsDebug[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		attachmentsDebug[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		attachmentsDebug[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+	
+		// depth stencil attachment
+		attachmentsDebug[1].format = PixelFormatToVkFormat(m_DepthFormat, false);
+		attachmentsDebug[1].samples = m_SampleCount;
+		attachmentsDebug[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		attachmentsDebug[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		attachmentsDebug[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		attachmentsDebug[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
+		attachmentsDebug[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		attachmentsDebug[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+		VkAttachmentReference swapReferenceDebug;
+		swapReferenceDebug.attachment = 0;
+		swapReferenceDebug.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		VkAttachmentReference depthReferenceDebug;
+		depthReferenceDebug.attachment = 1;
+		depthReferenceDebug.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+
+		//debugRenderPass的子流程
+		VkSubpassDescription subpassDescriptionsDebug;
+		memset(&subpassDescriptionsDebug, 0, sizeof(VkSubpassDescription));
+
+
+
+		subpassDescriptionsDebug.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpassDescriptionsDebug.colorAttachmentCount = 1;
+		subpassDescriptionsDebug.pColorAttachments = &swapReferenceDebug;     //可以看到第一个pass中输出到这个colorReferences附着中   所以第一个管线应该要绑定3个RT和一个深度缓冲
+		subpassDescriptionsDebug.pDepthStencilAttachment = &depthReferenceDebug;     //深度输出到depth附着中 
+
+		std::vector<VkSubpassDependency> dependenciesDebug(2);
+		dependenciesDebug[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+		dependenciesDebug[0].dstSubpass = 0;
+		dependenciesDebug[0].srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+		dependenciesDebug[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dependenciesDebug[0].srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+		dependenciesDebug[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		dependenciesDebug[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+		dependenciesDebug[1].srcSubpass = 0;
+		dependenciesDebug[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+		dependenciesDebug[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dependenciesDebug[1].dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+		dependenciesDebug[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		dependenciesDebug[1].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+		dependenciesDebug[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+		VkRenderPassCreateInfo renderPassInfoDebug;
+		ZeroVulkanStruct(renderPassInfoDebug, VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO);
+		renderPassInfoDebug.attachmentCount = attachmentsDebug.size();
+		renderPassInfoDebug.pAttachments = attachmentsDebug.data();
+		renderPassInfoDebug.subpassCount = 1;
+		renderPassInfoDebug.pSubpasses = &subpassDescriptionsDebug;
+		renderPassInfoDebug.dependencyCount = 2;
+		renderPassInfoDebug.pDependencies = dependenciesDebug.data();
+		VERIFYVULKANRESULT(vkCreateRenderPass(device, &renderPassInfoDebug, VULKAN_CPU_ALLOCATOR, &m_RenderPassDebug));
 	}
 
 	void DestroyFrameBuffers() override
@@ -361,6 +467,11 @@ protected:
 		if (m_RenderPass != VK_NULL_HANDLE) {
 			vkDestroyRenderPass(device, m_RenderPass, VULKAN_CPU_ALLOCATOR);
 			m_RenderPass = VK_NULL_HANDLE;
+		}
+
+		if (m_RenderPassDebug != VK_NULL_HANDLE) {
+			vkDestroyRenderPass(device, m_RenderPassDebug, VULKAN_CPU_ALLOCATOR);
+			m_RenderPassDebug = VK_NULL_HANDLE;
 		}
 	}
 
@@ -569,6 +680,11 @@ private:
 		clearValues[3].color		= { { 0.0f, 0.0f, 0.0f, 0.0f } };
 		clearValues[4].depthStencil = { 1.0f, 0 };
 
+
+		VkClearValue clearValuesDebug[2];
+		clearValuesDebug[0].color = { { 0.2f, 0.2f, 0.2f, 0.0f } };
+		clearValuesDebug[1].depthStencil = { 1.0f, 0 };
+
 		VkRenderPassBeginInfo renderPassBeginInfo;
 		ZeroVulkanStruct(renderPassBeginInfo, VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO);
         renderPassBeginInfo.renderPass      = m_RenderPass;
@@ -629,7 +745,34 @@ private:
                 }
 			}
 
-			vkCmdNextSubpass(m_CommandBuffers[i], VK_SUBPASS_CONTENTS_INLINE);
+
+			//用第二个pass画debug信息
+//			vkCmdNextSubpass(m_CommandBuffers[i], VK_SUBPASS_CONTENTS_INLINE);
+
+			VkRenderPassBeginInfo renderPassBeginInfo;
+			ZeroVulkanStruct(renderPassBeginInfo, VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO);
+			renderPassBeginInfo.renderPass = m_RenderPassDebug;
+			renderPassBeginInfo.clearValueCount = 2;
+			renderPassBeginInfo.pClearValues = clearValuesDebug;
+			renderPassBeginInfo.renderArea.offset.x = 0;
+			renderPassBeginInfo.renderArea.offset.y = 0;
+			renderPassBeginInfo.renderArea.extent.width = m_FrameWidth;
+			renderPassBeginInfo.renderArea.extent.height = m_FrameHeight;
+			renderPassBeginInfo.framebuffer = m_FrameBuffersDebug[i];
+
+			VkViewport viewport = {};
+			viewport.x = 0;
+			viewport.y = m_FrameHeight;
+			viewport.width = m_FrameWidth;
+			viewport.height = -(float)m_FrameHeight;    // flip y axis
+			viewport.minDepth = 0.0f;
+			viewport.maxDepth = 1.0f;
+
+			VkRect2D scissor = {};
+			scissor.extent.width = m_FrameWidth;
+			scissor.extent.height = m_FrameHeight;
+			scissor.offset.x = 0;
+			scissor.offset.y = 0;
 
 			// pass2
 			//这个pass把gbuffer当做输入，画在一张全屏上
@@ -641,7 +784,7 @@ private:
 				}
 			}
             
-			m_GUI->BindDrawCmd(m_CommandBuffers[i], m_RenderPass, 1);
+			m_GUI->BindDrawCmd(m_CommandBuffers[i], m_RenderPassDebug, 1);
 
 			vkCmdEndRenderPass(m_CommandBuffers[i]);
 			VERIFYVULKANRESULT(vkEndCommandBuffer(m_CommandBuffers[i]));
@@ -665,12 +808,11 @@ private:
 			m_DescriptorSets[i]->WriteBuffer("lightDatas", m_LightBuffer);
 		}
 
-
-		m_DebugDescriptorSets.resize(m_AttachsNormal.size());
+		m_DebugDescriptorSets.resize(m_AttachsColor.size());
 		for (int32 i = 0; i < m_DebugDescriptorSets.size(); ++i)
 		{
 			m_DebugDescriptorSets[i] = m_Shader2->AllocateDescriptorSet();
-			m_DebugDescriptorSets[i]->WriteImage("inputNormal", m_AttachsNormal[i]);
+			m_DebugDescriptorSets[i]->WriteImage("inputNormal", m_AttachsDebug[i]);
 		}
 
 
@@ -719,7 +861,7 @@ private:
 		pipelineInfo2.depthStencilState.depthWriteEnable = VK_FALSE;
 		pipelineInfo2.depthStencilState.stencilTestEnable = VK_FALSE;
 		pipelineInfo2.shader = m_Shader2;
-		pipelineInfo2.subpass = 2;
+//		pipelineInfo2.subpass = 2;
 		m_Pipeline2 = vk_demo::DVKGfxPipeline::Create(
 			m_VulkanDevice,
 			m_PipelineCache,
@@ -883,6 +1025,7 @@ private:
 	DVKTextureArray					m_AttachsColor;
     DVKTextureArray                 m_AttachsNormal;
 	DVKTextureArray					m_AttachsPosition;
+	DVKTextureArray					m_AttachsDebug;
 	
 	ImageGUIContext*				m_GUI = nullptr;
 };

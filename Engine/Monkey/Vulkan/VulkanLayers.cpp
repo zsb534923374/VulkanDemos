@@ -19,6 +19,7 @@ static const char* G_ValidationLayersInstance[] =
 {
 #if PLATFORM_WINDOWS
 	"VK_LAYER_LUNARG_standard_validation",
+	"VK_LAYER_KHRONOS_validation",
 #elif PLATFORM_MAC
 	"VK_LAYER_LUNARG_standard_validation",
     "VK_LAYER_GOOGLE_unique_objects",
@@ -93,6 +94,10 @@ static const char* G_InstanceExtensions[] =
     
 #endif
 	nullptr
+};
+
+const std::vector<const char*> validationLayers = {
+	"VK_LAYER_KHRONOS_validation"
 };
 
 static const char* G_DeviceExtensions[] =
@@ -207,6 +212,22 @@ void VulkanLayerExtension::AddUniqueExtensionNames(std::vector<const char*>& out
 	}
 }
 
+
+// std::vector<const char*> VulkanLayerExtension::getRequiredExtensions() 
+// {
+// 	uint32_t glfwExtensionCount = 0;
+// 	const char** glfwExtensions;
+// 	glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+// 	std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+// 
+// 	if (enableValidationLayers) {
+// 		extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+// 	}
+// 
+// 	return extensions;
+// }
+
+
 void VulkanRHI::GetInstanceLayersAndExtensions(std::vector<const char*>& outInstanceExtensions, std::vector<const char*>& outInstanceLayers)
 {
 	std::vector<VulkanLayerExtension> globalLayerExtensions(1);
@@ -258,6 +279,10 @@ void VulkanRHI::GetInstanceLayersAndExtensions(std::vector<const char*>& outInst
 		outInstanceExtensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
 	}
 
+	if (FindLayerExtensionInList(globalLayerExtensions, VK_EXT_DEBUG_UTILS_EXTENSION_NAME)) {
+		outInstanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+	}
+
 #endif // MONKEY_DEBUG
 
 	std::vector<const char*> platformExtensions;
@@ -296,6 +321,31 @@ void VulkanRHI::GetInstanceLayersAndExtensions(std::vector<const char*>& outInst
 	else {
 		MLOG("Not using instance extensions");
 	}
+}
+
+bool VulkanRHI::checkValidationLayerSupport() {
+	uint32_t layerCount;
+	vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+
+	std::vector<VkLayerProperties> availableLayers(layerCount);
+	vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+
+	for (const char* layerName : validationLayers) {
+		bool layerFound = false;
+
+		for (const auto& layerProperties : availableLayers) {
+			if (strcmp(layerName, layerProperties.layerName) == 0) {
+				layerFound = true;
+				break;
+			}
+		}
+
+		if (!layerFound) {
+			return false;
+		}
+	}
+
+	return true;
 }
 
 void VulkanDevice::GetDeviceExtensionsAndLayers(std::vector<const char*>& outDeviceExtensions, std::vector<const char*>& outDeviceLayers, bool& bOutDebugMarkers)

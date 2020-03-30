@@ -62,6 +62,7 @@ void VulkanRHI::InitInstance()
 		MLOG("%s\n", "Failed load vulkan instance functions.");
 		return;
 	}
+	setupDebugMessenger();
 #if MONKEY_DEBUG
     SetupDebugLayerCallback();
 #endif
@@ -109,6 +110,8 @@ void VulkanRHI::DestorySwapChain()
 void VulkanRHI::CreateInstance()
 {
 	GetInstanceLayersAndExtensions(m_InstanceExtensions, m_InstanceLayers);
+
+	checkValidationLayerSupport();
 	
 	if (m_AppInstanceExtensions.size() > 0)
 	{

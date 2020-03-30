@@ -12,6 +12,5 @@ out gl_PerVertex {
 void main() 
 {
 	gl_Position = vec4(inPosition, 1.0f);
-//	gl_Position = vec4(inPosition.x / 5,inPosition.y/5,inPosition.z/5, 1.0f);
 	outUV0 = inUV0;
 }

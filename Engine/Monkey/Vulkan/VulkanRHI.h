@@ -89,6 +89,10 @@ protected:
 
 	void CreateInstance();
 
+	
+	void setupDebugMessenger();
+
+
 	void SelectAndInitDevice();
 
 	static void GetInstanceLayersAndExtensions(std::vector<const char*>& outInstanceExtensions, std::vector<const char*>& outInstanceLayers);
@@ -104,6 +108,8 @@ protected:
 	void RecreateSwapChain();
 
 	void DestorySwapChain();
+
+	bool checkValidationLayerSupport();
 
 protected:
 
@@ -124,6 +130,7 @@ protected:
 	PixelFormat							m_PixelFormat;
 	std::vector<VkImage>				m_BackbufferImages;
 	std::vector<VkImageView>			m_BackbufferViews;
+	VkDebugUtilsMessengerEXT			m_DebugMessenger;
 };
 
 

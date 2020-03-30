@@ -24,6 +24,7 @@ public:
 		, m_DepthStencilView(VK_NULL_HANDLE)
 		, m_DepthStencilMemory(VK_NULL_HANDLE)
 		, m_RenderPass(VK_NULL_HANDLE)
+		, m_RenderPassDebug(VK_NULL_HANDLE)
 		, m_SampleCount(VK_SAMPLE_COUNT_1_BIT)
 		, m_DepthFormat(PF_DepthStencil)
 	{
@@ -234,6 +235,8 @@ protected:
 		renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
 		renderPassInfo.pDependencies   = dependencies.data();
 		VERIFYVULKANRESULT(vkCreateRenderPass(device, &renderPassInfo, VULKAN_CPU_ALLOCATOR, &m_RenderPass));
+
+		VERIFYVULKANRESULT(vkCreateRenderPass(device, &renderPassInfo, VULKAN_CPU_ALLOCATOR, &m_RenderPassDebug));
 	}
 
 	virtual void DestroyFrameBuffers()
@@ -290,12 +293,14 @@ protected:
 	std::string 				m_Title;
     
 	std::vector<VkFramebuffer>	m_FrameBuffers;
+	std::vector<VkFramebuffer>	m_FrameBuffersDebug;
     
     VkImage						m_DepthStencilImage;
     VkImageView					m_DepthStencilView;
     VkDeviceMemory				m_DepthStencilMemory;
 
 	VkRenderPass				m_RenderPass;
+	VkRenderPass                m_RenderPassDebug;
 	VkSampleCountFlagBits		m_SampleCount;
 
     PixelFormat					m_DepthFormat;

@@ -163,6 +163,8 @@ private:
 			VK_IMAGE_ASPECT_DEPTH_BIT,
 			2048, 2048,
 			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
+
+	//		VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT
 		);
         
 		vk_demo::DVKRenderPassInfo passInfo(m_ShadowMap, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE);
@@ -285,7 +287,7 @@ private:
 		ZeroVulkanStruct(cmdBeginInfo, VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
 		VERIFYVULKANRESULT(vkBeginCommandBuffer(commandBuffer, &cmdBeginInfo));
 
-		// render target pass
+		// render target pass     //画深度图
 		{
 			m_ShadowRTT->BeginRenderPass(commandBuffer);
 
@@ -327,25 +329,25 @@ private:
 			}
 
 			// debug
-			viewport.x = m_FrameWidth * 0.75f;
-			viewport.y = m_FrameHeight * 0.25f;
-			viewport.width  = m_FrameWidth * 0.25f;
-			viewport.height = -(float)m_FrameHeight * 0.25f;    // flip y axis
-			
-			scissor.offset.x = m_FrameWidth * 0.75f;
-			scissor.offset.y = 0;
-			scissor.extent.width  = m_FrameWidth  * 0.25f;
-			scissor.extent.height = m_FrameHeight * 0.25f;
-
-			vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-			vkCmdSetScissor(commandBuffer,  0, 1, &scissor);
-
-			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_DebugMaterial->GetPipeline());
-			m_DebugMaterial->BindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 0);
-			m_Quad->meshes[0]->BindDrawCmd(commandBuffer);
+// 			viewport.x = m_FrameWidth * 0.75f;
+// 			viewport.y = m_FrameHeight * 0.25f;
+// 			viewport.width  = m_FrameWidth * 0.25f;
+// 			viewport.height = -(float)m_FrameHeight * 0.25f;    // flip y axis
+// 			
+// 			scissor.offset.x = m_FrameWidth * 0.75f;
+// 			scissor.offset.y = 0;
+// 			scissor.extent.width  = m_FrameWidth  * 0.25f;
+// 			scissor.extent.height = m_FrameHeight * 0.25f;
+// 
+// 			vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+// 			vkCmdSetScissor(commandBuffer,  0, 1, &scissor);
+// 
+// 			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_DebugMaterial->GetPipeline());
+// 			m_DebugMaterial->BindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 0);
+// 			m_Quad->meshes[0]->BindDrawCmd(commandBuffer);
 
 			m_GUI->BindDrawCmd(commandBuffer, m_RenderPass);
-
+ 
 			vkCmdEndRenderPass(commandBuffer);
 		}
 
